@@ -18,6 +18,7 @@ import (
 	"bufio"
 	"bytes"
 	"context"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -59,6 +60,8 @@ type lfsFile struct {
 	Pointer entities.Hash `json:"pointer"`
 	Content entities.Hash `json:"content"`
 	Size    int64         `json:"size"`
+	// OID is the git-lfs oid, the SHA-256 of the content.
+	OID string `json:"oid"`
 }
 
 // lfsState maps working tree paths to hydrated Git LFS files.
@@ -292,7 +295,9 @@ func (g *CASGit) HydrateLFS(ctx context.Context, workDir, gitDir string, deepTre
 
 	known := make(map[entities.Hash]lfsFile)
 	for _, f := range readLFSState(gitDir) {
-		known[f.Pointer] = f
+		if f.OID != "" { // Written before oids were recorded.
+			known[f.Pointer] = f
+		}
 	}
 
 	// Reuse what the previous hydration resolved, then read each remaining
@@ -333,7 +338,7 @@ func (g *CASGit) HydrateLFS(ctx context.Context, workDir, gitDir string, deepTre
 				unresolved++
 				return nil
 			}
-			resolved[p.hash] = lfsFile{Pointer: p.hash, Content: content, Size: size}
+			resolved[p.hash] = lfsFile{Pointer: p.hash, Content: content, Size: size, OID: oid}
 			return nil
 		})
 	}
@@ -390,5 +395,30 @@ func (g *CASGit) HydrateLFS(ctx context.Context, workDir, gitDir string, deepTre
 	if err := grp.Wait(); err != nil {
 		return err
 	}
+	g.addLFSDigests(ctx, state)
 	return writeLFSState(gitDir, state)
+}
+
+// addLFSDigests tells the mount the SHA-256 of each hydrated file's content,
+// which is its oid, so tools reading digests from CASFS need not hash it.
+func (g *CASGit) addLFSDigests(ctx context.Context, state lfsState) {
+	if g.client == nil || len(state) == 0 {
+		return
+	}
+	seen := make(map[entities.Hash]bool, len(state))
+	entries := make([]binding.DigestEntry, 0, len(state))
+	for _, f := range state {
+		if seen[f.Content] {
+			continue
+		}
+		seen[f.Content] = true
+		sha, err := hex.DecodeString(f.OID)
+		if err != nil || len(sha) != entities.SHA256Size {
+			continue
+		}
+		entries = append(entries, binding.DigestEntry{Hash: f.Content, SHA256: entities.SHA256(sha)})
+	}
+	if err := g.client.AddDigestMapEntries(ctx, entries); err != nil {
+		log.Printf("cannot record Git LFS digests: %v", err)
+	}
 }

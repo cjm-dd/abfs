@@ -22,6 +22,7 @@ import (
 	"fmt"
 	"io"
 	"io/fs"
+	"log"
 	"os"
 	"path"
 	"path/filepath"
@@ -30,6 +31,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"syscall"
 
 	"github.com/google/ninja-go/xxmap"
@@ -37,6 +39,7 @@ import (
 
 	"github.com/google/abfs/binding"
 	"github.com/google/abfs/breakerrgroup"
+	"github.com/google/abfs/cas/fs/ioctl"
 	"github.com/google/abfs/casgit"
 	"github.com/google/abfs/shared/bindcas"
 	"github.com/google/abfs/shared/entities"
@@ -64,6 +67,8 @@ type CasfsMount struct {
 	digestMap        xxmap.StringMap[entities.SHA256]
 	loadedTrees      entities.SyncHashSet
 	loadedDigestMaps entities.SyncHashSet
+	// noKernelDigests is set once the CASFS module rejects digests.
+	noKernelDigests atomic.Bool
 }
 
 func NewCasfsMount(osMounter OsMounter) *CasfsMount {
@@ -797,8 +802,36 @@ func (m *CasfsMount) loadDigestMap(ctx context.Context, dmHash entities.Hash, vi
 }
 
 func (m *CasfsMount) AddDigestMapEntries(entries []binding.DigestEntry) {
+	added := entries[:0:0]
 	for _, e := range entries {
-		m.digestMap.Put(e.Hash.String(), e.SHA256)
+		key := e.Hash.String()
+		if m.digestMap.Get(key).IsZero() {
+			added = append(added, e)
+		}
+		m.digestMap.Put(key, e.SHA256)
+	}
+	// Only new digests: the kernel table already has the rest.
+	m.addKernelDigests(added)
+}
+
+// addKernelDigests hands digests to the CASFS module too, which serves them
+// from the sha256 xattr to build tools without a round trip to this daemon.
+func (m *CasfsMount) addKernelDigests(entries []binding.DigestEntry) {
+	if len(entries) == 0 || m.noKernelDigests.Load() {
+		return
+	}
+	kentries := make([]ioctl.CasfsDigestEntry, len(entries))
+	for i, e := range entries {
+		kentries[i] = ioctl.CasfsDigestEntry{Sha: e.Hash, SHA256: e.SHA256}
+	}
+	if err := ioctl.AddDigests(m.mountPoint, kentries); err != nil {
+		if errors.Is(err, ioctl.ErrDigestsUnsupported) {
+			if !m.noKernelDigests.Swap(true) {
+				log.Printf("CASFS module has no digest table; the sha256 xattr is unavailable")
+			}
+			return
+		}
+		log.Printf("cannot add %d digests to CASFS: %v", len(entries), err)
 	}
 }
 

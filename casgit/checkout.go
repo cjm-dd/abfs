@@ -459,6 +459,12 @@ func (c *GitCheckout) writeIndex(ctx context.Context, treeHash entities.Hash) er
 	if !ok {
 		return fmt.Errorf("expected DeepTreeObject from tree %s", treeHash)
 	}
+	if c.casgit.client != nil {
+		// Digests for the sha256 xattr; clone loads them for its tree.
+		if err := c.casgit.client.LoadTreeDigestMap(ctx, treeHash); err != nil {
+			log.Printf("cannot load digest map for tree %s: %v", treeHash, err)
+		}
+	}
 	if err := c.casgit.HydrateLFS(ctx, c.absWorkTree, c.GitDir, deepTree); err != nil {
 		return fmt.Errorf("cannot hydrate Git LFS files: %w", err)
 	}
