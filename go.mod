@@ -27,6 +27,7 @@ require (
 	github.com/DataDog/zstd v1.5.7
 	github.com/bazelbuild/remote-apis v0.0.0-20260216160025-715b73f3f9e4
 	github.com/bazelbuild/remote-apis-sdks v0.0.0-20260610142741-7ffd493e6686
+	github.com/container-storage-interface/spec v1.11.0
 	github.com/dgraph-io/badger/v4 v4.9.6
 	github.com/dustin/go-humanize v1.0.1
 	github.com/edsrzf/mmap-go v1.2.0
