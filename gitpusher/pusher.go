@@ -431,10 +431,13 @@ func (s *pusher) pushSingleLFSObject(ctx context.Context, client remote.RemotePr
 	if err != nil {
 		return err
 	}
-	defer entities.CloseErrCheck(file, &retErr)
 
-	// Push the real file.
+	// Push the real file. PutObject closes the reader on success, as in
+	// remote.PushFile, so close it here only on failure.
 	if err := client.PutObject(ctx, abfsHash, remote.NewBlobReader(file, size)); err != nil {
+		if closeErr := file.Close(); closeErr != nil {
+			log.Printf("failed to close %s: %v", lfsPath, closeErr)
+		}
 		return err
 	}
 
