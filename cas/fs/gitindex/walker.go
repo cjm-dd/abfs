@@ -59,6 +59,10 @@ func (t *TreeEntry) flatten(out *[]*TreeEntry) {
 type Result struct {
 	Entries []IndexEntry
 	Trees   []*TreeEntry
+
+	// newestContentMtime is the newest mtime, in seconds, of an entry whose
+	// working tree content differs from its blob (FileEntry.ContentSha).
+	newestContentMtime uint32
 }
 
 func isSkipName(name string) bool {

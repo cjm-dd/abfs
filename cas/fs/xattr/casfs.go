@@ -491,6 +491,7 @@ func (xfs *xattrFs) CreateGitIndex(path, directory, worktree, hash string) error
 		return fmt.Errorf("failed to scan worktree: %w", err)
 	}
 
+	scanResult.AwaitNotRacy()
 	return xfs.WriteGitIndex(filepath.Join(gitDir, "index"), scanResult)
 }
 
@@ -509,6 +510,7 @@ func (xfs *xattrFs) CreateGitIndexFromTree(ctx context.Context, path, directory,
 		return fmt.Errorf("failed to scan worktree with tree state: %w", err)
 	}
 
+	scanResult.AwaitNotRacy()
 	return xfs.WriteGitIndex(filepath.Join(gitDir, "index"), scanResult)
 }
 

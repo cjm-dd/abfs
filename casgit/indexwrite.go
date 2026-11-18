@@ -34,6 +34,6 @@ func (g *CASGit) WriteIndexFromDeepTree(workDir string, deepTree *gitobjects.Dee
 	dotgit := path.Dir(indexFilePath)
 	dotGitParent, dotGitName := filepath.Dir(dotgit), filepath.Base(dotgit)
 
-	treeRoot := NewDeepTreeDir(g, deepTree)
+	treeRoot := NewDeepTreeDirWithLFS(g, deepTree, dotgit)
 	return bindcas.CreateGitIndexFromTree(context.Background(), dotGitParent, dotGitName, workDir, treeRoot)
 }

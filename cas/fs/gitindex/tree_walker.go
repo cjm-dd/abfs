@@ -207,7 +207,11 @@ func ScanTree(ctx context.Context, rootPath string, root TreeDirectory, bufSize 
 
 						// Check if the file has changed locally
 						isDirty := (hdr.Dirtiness != 0)
-						isHashMismatch := hdr.Sha != zeroSha && hdr.Sha != fe.Sha
+						diskSha := fe.Sha
+						if fe.ContentSha != zeroSha {
+							diskSha = fe.ContentSha
+						}
+						isHashMismatch := hdr.Sha != zeroSha && hdr.Sha != diskSha
 						isAri := (hdr.Flags&ioctl.CASFS_FLAG_HAS_ARI != 0) || (hdr.AriLen > 0)
 
 						if isDirty || isHashMismatch || isAri {
@@ -242,6 +246,9 @@ func ScanTree(ctx context.Context, rootPath string, root TreeDirectory, bufSize 
 				tree.EntryCount = -1
 			}
 
+			if fe.ContentSha != zeroSha {
+				res.newestContentMtime = max(res.newestContentMtime, ie.MtimeSec)
+			}
 			res.Entries = append(res.Entries, ie)
 			if tree.EntryCount >= 0 {
 				tree.EntryCount++

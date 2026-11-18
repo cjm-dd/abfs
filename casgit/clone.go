@@ -183,11 +183,6 @@ func (c *GitClone) clone(ctx context.Context) (returnErr error) {
 		return err
 	}
 
-	indexPath := path.Join(c.GitDir, "index")
-	if err := c.casgit.WriteIndexFromDeepTree(c.absDirectory, deepTree, indexPath); err != nil {
-		return err
-	}
-
 	var head string
 	if c.cloneSource != cloneSourceBranch || c.DetachedHead {
 		head = commit.Hash.String()
@@ -212,6 +207,15 @@ func (c *GitClone) clone(ctx context.Context) (returnErr error) {
 	}
 
 	if err := c.casgit.client.AddGitRepo(c.workDir, c.gitDir, c.objectsDir, treeHash); err != nil {
+		return err
+	}
+
+	// Hydration resolves gitattributes with git, so it runs once the
+	// repository is complete, and the index is written after it.
+	if err := c.casgit.HydrateLFS(ctx, c.absDirectory, c.GitDir, deepTree); err != nil {
+		return fmt.Errorf("cannot hydrate Git LFS files: %w", err)
+	}
+	if err := c.casgit.WriteIndexFromDeepTree(c.absDirectory, deepTree, path.Join(c.GitDir, "index")); err != nil {
 		return err
 	}
 	if err := c.casgit.client.LoadTreeDigestMap(ctx, treeHash); err != nil {

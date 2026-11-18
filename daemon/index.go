@@ -202,7 +202,7 @@ func (c *SnapshotService) RestoreIndex(ctx context.Context, indexSnapHash entiti
 			deepTree = mapObj.(*gitobjects.DeepTreeObject)
 		}
 
-		treeDir := casgit.NewDeepTreeDir(c.git, deepTree)
+		treeDir := casgit.NewDeepTreeDirWithLFS(c.git, deepTree, path.Dir(indexPath))
 		var scanErr error
 		res, scanErr = gitindex.ScanTree(ctx, workDir, treeDir, 64*1024)
 		if scanErr != nil {

@@ -361,7 +361,11 @@ func (r *GitRepo) DiffHeadWorkDir(ctx context.Context) ([]dirsync.DiffAction, er
 	if err != nil {
 		return nil, err
 	}
-	return r.DiffHeadTree(ctx, curTree)
+	diff, err := r.DiffHeadTree(ctx, curTree)
+	if err != nil {
+		return nil, err
+	}
+	return dropHydratedLFS(diff, readLFSState(r.gitDir)), nil
 }
 
 func (r *GitRepo) DiffHeadTree(ctx context.Context, treeHash entities.Hash) ([]dirsync.DiffAction, error) {

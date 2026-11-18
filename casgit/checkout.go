@@ -448,6 +448,8 @@ func (c *GitCheckout) applyTreeToWorkdir(ctx context.Context, treeHash entities.
 	return dirsync.DirSyncDiff(ctx, c.casgit.store, c.workDir, newDiff)
 }
 
+// writeIndex hydrates the Git LFS files of treeHash in the working tree and
+// writes the index for it.
 func (c *GitCheckout) writeIndex(ctx context.Context, treeHash entities.Hash) error {
 	mapObj, err := maps.Map(ctx, binding.NewDeepTreeRequest(treeHash, c.casgit.store))
 	if err != nil {
@@ -456,6 +458,9 @@ func (c *GitCheckout) writeIndex(ctx context.Context, treeHash entities.Hash) er
 	deepTree, ok := mapObj.(*gitobjects.DeepTreeObject)
 	if !ok {
 		return fmt.Errorf("expected DeepTreeObject from tree %s", treeHash)
+	}
+	if err := c.casgit.HydrateLFS(ctx, c.absWorkTree, c.GitDir, deepTree); err != nil {
+		return fmt.Errorf("cannot hydrate Git LFS files: %w", err)
 	}
 	return c.casgit.WriteIndexFromDeepTree(c.absWorkTree, deepTree, path.Join(c.GitDir, "index"))
 }

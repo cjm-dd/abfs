@@ -16,6 +16,7 @@ package casgit
 
 import (
 	"context"
+	"path"
 
 	"github.com/google/abfs/binding"
 	"github.com/google/abfs/cas/fs/gitindex"
@@ -26,8 +27,10 @@ import (
 type deepTreeDir struct {
 	git     *CASGit
 	name    string
+	path    string
 	sha     [20]byte
 	entries []*entities.DeepEntry
+	lfs     lfsState
 }
 
 // NewDeepTreeDir creates a TreeDirectory root from a DeepTreeObject.
@@ -38,6 +41,15 @@ func NewDeepTreeDir(git *CASGit, deepTree *gitobjects.DeepTreeObject) gitindex.T
 		sha:     deepTree.Entries[0].Hash,
 		entries: deepTree.Entries,
 	}
+}
+
+// NewDeepTreeDirWithLFS is NewDeepTreeDir for a working tree whose Git LFS
+// files HydrateLFS recorded in gitDir, so their entries carry the content's
+// hash and size.
+func NewDeepTreeDirWithLFS(git *CASGit, deepTree *gitobjects.DeepTreeObject, gitDir string) gitindex.TreeDirectory {
+	d := NewDeepTreeDir(git, deepTree).(*deepTreeDir)
+	d.lfs = readLFSState(gitDir)
+	return d
 }
 
 func (d *deepTreeDir) Name() string  { return d.name }
@@ -66,12 +78,17 @@ func (d *deepTreeDir) Files(ctx context.Context) ([]gitindex.FileEntry, error) {
 				mode = 0100644
 			}
 
-			files = append(files, gitindex.FileEntry{
+			fe := gitindex.FileEntry{
 				Name: ent.Name,
 				Sha:  ent.Hash,
 				Mode: mode,
 				Size: uint32(ent.Size),
-			})
+			}
+			if f, ok := d.lfs[path.Join(d.path, ent.Name)]; ok && f.Pointer == ent.Hash {
+				fe.ContentSha = f.Content
+				fe.Size = uint32(f.Size)
+			}
+			files = append(files, fe)
 			i++
 		}
 	}
@@ -88,8 +105,10 @@ func (d *deepTreeDir) Subtrees(ctx context.Context) ([]gitindex.TreeDirectory, e
 			subtrees = append(subtrees, &deepTreeDir{
 				git:     d.git,
 				name:    ent.Name,
+				path:    path.Join(d.path, ent.Name),
 				sha:     ent.Hash,
 				entries: d.entries[i : i+span],
+				lfs:     d.lfs,
 			})
 			i += span
 		case entities.FileModeDeepTree:
@@ -100,8 +119,10 @@ func (d *deepTreeDir) Subtrees(ctx context.Context) ([]gitindex.TreeDirectory, e
 			subtrees = append(subtrees, &deepTreeDir{
 				git:     d.git,
 				name:    ent.Name,
+				path:    path.Join(d.path, ent.Name),
 				sha:     dt.Entries[0].Hash,
 				entries: dt.Entries,
+				lfs:     d.lfs,
 			})
 			i++
 		default:
