@@ -554,7 +554,8 @@ func (s *ShellGit) lfsFiles(repoPath string, all bool) (map[string][]string, err
 	scanner := bufio.NewScanner(stdout)
 	files := make(map[string][]string)
 	for scanner.Scan() {
-		splits := strings.Split(scanner.Text(), " ")
+		// The path is the last field and may contain spaces.
+		splits := strings.SplitN(scanner.Text(), " ", 3)
 		if len(splits) != 3 {
 			return nil, fmt.Errorf("expected 3 splits for line: %q", scanner.Text())
 		}
